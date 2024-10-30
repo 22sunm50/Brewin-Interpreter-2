@@ -28,6 +28,8 @@ class Interpreter(InterpreterBase):
         self.env = EnvironmentManager()
         self.__run_statements(main_func.get("statements"))
 
+    # creates a mapping of function names to their AST nodes, 
+        # good for: quick look-up of functions during execution.
     def __set_up_function_table(self, ast):
         self.func_name_to_ast = {}
         for func_def in ast.get("functions"):
@@ -49,7 +51,6 @@ class Interpreter(InterpreterBase):
                 self.__assign(statement)
             elif statement.elem_type == InterpreterBase.VAR_DEF_NODE:
                 self.__var_def(statement)
-
 
     def __call_func(self, call_node):
         func_name = call_node.get("name")
@@ -130,13 +131,37 @@ class Interpreter(InterpreterBase):
         return f(left_value_obj, right_value_obj)
 
     def __setup_ops(self):
+        # dict of ops to corresponding lambda
         self.op_to_lambda = {}
-        # set up operations on integers
+        # INT
+        # arithmetic
         self.op_to_lambda[Type.INT] = {}
-        self.op_to_lambda[Type.INT]["+"] = lambda x, y: Value(
-            x.type(), x.value() + y.value()
-        )
-        self.op_to_lambda[Type.INT]["-"] = lambda x, y: Value(
-            x.type(), x.value() - y.value()
-        )
-        # add other operators here later for int, string, bool, etc
+        self.op_to_lambda[Type.INT]["+"] = lambda x, y: Value(x.type(), x.value() + y.value())
+        self.op_to_lambda[Type.INT]["-"] = lambda x, y: Value(x.type(), x.value() - y.value())
+        self.op_to_lambda[Type.INT]["*"] = lambda x, y: Value(x.type(), x.value() * y.value())
+        self.op_to_lambda[Type.INT]["/"] = lambda x, y: Value(x.type(), x.value() // y.value())  # integer division
+        # comparison
+        self.op_to_lambda[Type.INT]["=="] = lambda x, y: Value(Type.BOOL, x.value() == y.value())
+        self.op_to_lambda[Type.INT]["!="] = lambda x, y: Value(Type.BOOL, x.value() != y.value())
+        self.op_to_lambda[Type.INT][">"] = lambda x, y: Value(Type.BOOL, x.value() > y.value())
+        self.op_to_lambda[Type.INT][">="] = lambda x, y: Value(Type.BOOL, x.value() >= y.value())
+        self.op_to_lambda[Type.INT]["<"] = lambda x, y: Value(Type.BOOL, x.value() < y.value())
+        self.op_to_lambda[Type.INT]["<="] = lambda x, y: Value(Type.BOOL, x.value() <= y.value())
+        
+        # BOOL
+        self.op_to_lambda[Type.BOOL] = {}
+        # logical
+        self.op_to_lambda[Type.BOOL]["&&"] = lambda x, y: Value(Type.BOOL, x.value() and y.value())
+        self.op_to_lambda[Type.BOOL]["||"] = lambda x, y: Value(Type.BOOL, x.value() or y.value())
+        self.op_to_lambda[Type.BOOL]["!"] = lambda x: Value(Type.BOOL, not x.value())
+        # comparison
+        self.op_to_lambda[Type.BOOL]["=="] = lambda x, y: Value(Type.BOOL, x.value() == y.value())
+        self.op_to_lambda[Type.BOOL]["!="] = lambda x, y: Value(Type.BOOL, x.value() != y.value())
+
+        # STRING
+        self.op_to_lambda[Type.STRING] = {}
+        # concatenation
+        self.op_to_lambda[Type.STRING]["+"] = lambda x, y: Value(Type.STRING, x.value() + y.value())
+        # comparison
+        self.op_to_lambda[Type.STRING]["=="] = lambda x, y: Value(Type.BOOL, x.value() == y.value())
+        self.op_to_lambda[Type.STRING]["!="] = lambda x, y: Value(Type.BOOL, x.value() != y.value())
