@@ -68,6 +68,7 @@ class Interpreter(InterpreterBase):
             result = self.__eval_expr(arg)  # result is a Value object
             output = output + get_printable(result)
         super().output(output)
+        return Value(Type.NIL, None)  # print returns 'nil' (needed within an expression)
 
     def __call_input(self, call_ast):
         args = call_ast.get("args")
@@ -81,7 +82,8 @@ class Interpreter(InterpreterBase):
         inp = super().get_input()
         if call_ast.get("name") == "inputi":
             return Value(Type.INT, int(inp))
-        # we can support inputs here later
+        if call_ast.get("name") == "inputs":
+            return Value(Type.STRING, int(inp))
 
     def __assign(self, assign_ast):
         var_name = assign_ast.get("name")
@@ -115,19 +117,35 @@ class Interpreter(InterpreterBase):
             return self.__eval_op(expr_ast)
 
     def __eval_op(self, arith_ast):
-        left_value_obj = self.__eval_expr(arith_ast.get("op1"))
-        right_value_obj = self.__eval_expr(arith_ast.get("op2"))
-        if left_value_obj.type() != right_value_obj.type():
+        print(f"🤖 Entered __eval_op")
+        left_value_obj = self.__eval_expr(arith_ast.get("op1")) # returns type Value
+        left_type = left_value_obj.type()
+        right_value_obj = self.__eval_expr(arith_ast.get("op2")) # returns type Value
+        right_type = right_value_obj.type()
+        operator = arith_ast.elem_type
+        print(f"🤖 In __eval_op: left type = {left_type} | right type = {right_type}")
+
+        # special: "==" and "!="
+        if operator == "==" or operator == "!=":
+            # check if diff types
+            if left_type != right_type:
+                # diff types: always not equal
+                return Value(Type.BOOL, operator == "!=")  # True for "!=", False for "=="
+            # same type: get lambda for the operator and run it
+            f = self.op_to_lambda[left_type][operator]
+            return f(left_value_obj, right_value_obj)
+        if left_type != right_type:
             super().error(
                 ErrorType.TYPE_ERROR,
-                f"Incompatible types for {arith_ast.elem_type} operation",
+                f"Incompatible types [{left_type} and {right_type}] for {arith_ast.elem_type} operation",
             )
-        if arith_ast.elem_type not in self.op_to_lambda[left_value_obj.type()]:
+        if arith_ast.elem_type not in self.op_to_lambda[left_type]:
             super().error(
                 ErrorType.TYPE_ERROR,
-                f"Incompatible operator {arith_ast.get_type} for type {left_value_obj.type()}",
+                f"Incompatible operator {arith_ast.get_type} for type {left_type}",
             )
-        f = self.op_to_lambda[left_value_obj.type()][arith_ast.elem_type]
+
+        f = self.op_to_lambda[left_type][arith_ast.elem_type]
         return f(left_value_obj, right_value_obj)
 
     def __setup_ops(self):
@@ -165,3 +183,16 @@ class Interpreter(InterpreterBase):
         # comparison
         self.op_to_lambda[Type.STRING]["=="] = lambda x, y: Value(Type.BOOL, x.value() == y.value())
         self.op_to_lambda[Type.STRING]["!="] = lambda x, y: Value(Type.BOOL, x.value() != y.value())
+
+
+def main():
+  program = """func main() {
+                    print("abc"+"def");    /* prints abcdef */
+                    }
+                    """
+  interpreter = Interpreter()
+  interpreter.run(program)
+
+
+if __name__ == "__main__":
+    main()
