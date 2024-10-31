@@ -10,7 +10,7 @@ from brewparse import parse_program
 # Main interpreter class
 class Interpreter(InterpreterBase):
     # constants
-    BIN_OPS = {"+", "-"}
+    BIN_OPS = {'+', '-', '*', '/', '==', '<', '<=', '>', '>=', '!='}
 
     # methods
     def __init__(self, console_output=True, inp=None, trace_output=False):
@@ -63,10 +63,18 @@ class Interpreter(InterpreterBase):
         super().error(ErrorType.NAME_ERROR, f"Function {func_name} not found")
 
     def __call_print(self, call_ast):
+        print(f"🖨️ Entered the print function")
         output = ""
         for arg in call_ast.get("args"):
-            result = self.__eval_expr(arg)  # result is a Value object
-            output = output + get_printable(result)
+            print(f"🖨️ print arg: {arg}")
+            result = self.__eval_expr(arg)  # result gives a Value object
+            print(f"🖨️ result after __eval_expr: {result}")
+            # BOOLS:
+            if result.type() == Type.BOOL:
+                output += "true" if result.value() else "false"
+            else: 
+                output = output + get_printable(result)
+            print(f"🖨️ the output: {output}")
         super().output(output)
         return Value(Type.NIL, None)  # print returns 'nil' (needed within an expression)
 
@@ -101,23 +109,39 @@ class Interpreter(InterpreterBase):
             )
 
     def __eval_expr(self, expr_ast):
+        print(f"💾 Entered __eval_expr!")
         if expr_ast.elem_type == InterpreterBase.INT_NODE:
             return Value(Type.INT, expr_ast.get("val"))
         if expr_ast.elem_type == InterpreterBase.STRING_NODE:
             return Value(Type.STRING, expr_ast.get("val"))
+        if expr_ast.elem_type == InterpreterBase.BOOL_NODE:
+            return Value(Type.BOOL, expr_ast.get("val"))
         if expr_ast.elem_type == InterpreterBase.VAR_NODE:
             var_name = expr_ast.get("name")
             val = self.env.get(var_name)
+            print(f"💾 got val from var: {val}")
             if val is None:
                 super().error(ErrorType.NAME_ERROR, f"Variable {var_name} not found")
             return val
         if expr_ast.elem_type == InterpreterBase.FCALL_NODE:
             return self.__call_func(expr_ast)
-        if expr_ast.elem_type in Interpreter.BIN_OPS:
+        if expr_ast.elem_type in Interpreter.BIN_OPS or expr_ast.elem_type in {"&&", "||"}:
             return self.__eval_op(expr_ast)
+        if expr_ast.elem_type == 'neg' or expr_ast.elem_type == '!':
+            operand = self.__eval_expr(expr_ast.get("op1"))
+            if expr_ast.elem_type == 'neg':
+                if operand.type() != Type.INT:
+                    super().error(ErrorType.TYPE_ERROR, "(- or 'neg') requires an INT operand")
+                return Value(Type.INT, -operand.value())
+            elif expr_ast.elem_type == '!':
+                if operand.type() != Type.BOOL:
+                    super().error(ErrorType.TYPE_ERROR, "(!) requires a BOOL operand")
+                return Value(Type.BOOL, not operand.value())
 
     def __eval_op(self, arith_ast):
         print(f"🤖 Entered __eval_op")
+        print(f"🤖 the ops are: {arith_ast.get('op1')} and {arith_ast.get('op2')}")
+        # 🍅🍅🍅 this handles strict evaluation already i think
         left_value_obj = self.__eval_expr(arith_ast.get("op1")) # returns type Value
         left_type = left_value_obj.type()
         right_value_obj = self.__eval_expr(arith_ast.get("op2")) # returns type Value
@@ -127,12 +151,10 @@ class Interpreter(InterpreterBase):
 
         # special: "==" and "!="
         if operator == "==" or operator == "!=":
-            # check if diff types
+            # check if diff types: always not equal
             if left_type != right_type:
-                # diff types: always not equal
                 return Value(Type.BOOL, operator == "!=")  # True for "!=", False for "=="
-            # same type: get lambda for the operator and run it
-            f = self.op_to_lambda[left_type][operator]
+            f = self.op_to_lambda[left_type][operator] # same type: get lambda for the operator and run it
             return f(left_value_obj, right_value_obj)
         if left_type != right_type:
             super().error(
@@ -144,7 +166,6 @@ class Interpreter(InterpreterBase):
                 ErrorType.TYPE_ERROR,
                 f"Incompatible operator {arith_ast.get_type} for type {left_type}",
             )
-
         f = self.op_to_lambda[left_type][arith_ast.elem_type]
         return f(left_value_obj, right_value_obj)
 
@@ -171,7 +192,6 @@ class Interpreter(InterpreterBase):
         # logical
         self.op_to_lambda[Type.BOOL]["&&"] = lambda x, y: Value(Type.BOOL, x.value() and y.value())
         self.op_to_lambda[Type.BOOL]["||"] = lambda x, y: Value(Type.BOOL, x.value() or y.value())
-        self.op_to_lambda[Type.BOOL]["!"] = lambda x: Value(Type.BOOL, not x.value())
         # comparison
         self.op_to_lambda[Type.BOOL]["=="] = lambda x, y: Value(Type.BOOL, x.value() == y.value())
         self.op_to_lambda[Type.BOOL]["!="] = lambda x, y: Value(Type.BOOL, x.value() != y.value())
@@ -187,6 +207,15 @@ class Interpreter(InterpreterBase):
 
 def main():
   program = """func main() {
+                    print(true || false);  /* prints true */
+                    print(true || false && false); /* prints true */
+                    print(5/3);            /* prints 1 */
+                    print(-6);             /* prints -6 */
+                    print(!true);          /* prints false */
+
+                    var a;
+                    a = 3;
+                    print(a > 5);          /* prints false */
                     print("abc"+"def");    /* prints abcdef */
                     }
                     """
