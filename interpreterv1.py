@@ -42,6 +42,7 @@ class Interpreter(InterpreterBase):
 
     def __run_statements(self, statements):
         # all statements of a function are held in arg3 of the function AST node
+        print(f"🗣️ Entered run_statements! statements list = {statements}")
         for statement in statements:
             if self.trace_output:
                 print(statement)
@@ -51,6 +52,8 @@ class Interpreter(InterpreterBase):
                 self.__assign(statement)
             elif statement.elem_type == InterpreterBase.VAR_DEF_NODE:
                 self.__var_def(statement)
+            elif statement.elem_type == "if":
+                self.__handle_if(statement)
 
     def __call_func(self, call_node):
         func_name = call_node.get("name")
@@ -116,6 +119,8 @@ class Interpreter(InterpreterBase):
             return Value(Type.STRING, expr_ast.get("val"))
         if expr_ast.elem_type == InterpreterBase.BOOL_NODE:
             return Value(Type.BOOL, expr_ast.get("val"))
+        if expr_ast.elem_type == InterpreterBase.NIL_NODE:
+            return Value(Type.NIL, expr_ast.get("val"))
         if expr_ast.elem_type == InterpreterBase.VAR_NODE:
             var_name = expr_ast.get("name")
             val = self.env.get(var_name)
@@ -204,19 +209,42 @@ class Interpreter(InterpreterBase):
         self.op_to_lambda[Type.STRING]["=="] = lambda x, y: Value(Type.BOOL, x.value() == y.value())
         self.op_to_lambda[Type.STRING]["!="] = lambda x, y: Value(Type.BOOL, x.value() != y.value())
 
+        # NIL
+        self.op_to_lambda[Type.NIL] = {}
+        self.op_to_lambda[Type.NIL]["=="] = lambda x, y: Value(Type.BOOL, x.type() == y.type())
+        self.op_to_lambda[Type.NIL]["!="] = lambda x, y: Value(Type.BOOL, x.type() != y.type())
+
+    def __handle_if(self, if_ast):
+        # evaluate the condition
+        condition_expr = if_ast.get("condition")
+        condition_value = self.__eval_expr(condition_expr)
+        
+        # ensure the condition is a boolean
+        if condition_value.type() != Type.BOOL:
+            super().error(ErrorType.TYPE_ERROR, "Condition in if statement must evaluate to a boolean")
+
+        if_statements = if_ast.get("statements")
+        else_statements = if_ast.get("else_statements")
+
+        # execute the appropriate block based on the condition
+        if condition_value.value():  # true if
+            self.__run_statements(if_statements)
+        elif else_statements is not None:  # false & else block exists
+            self.__run_statements(else_statements)
 
 def main():
   program = """func main() {
-                    print(true || false);  /* prints true */
-                    print(true || false && false); /* prints true */
-                    print(5/3);            /* prints 1 */
-                    print(-6);             /* prints -6 */
-                    print(!true);          /* prints false */
-
                     var a;
                     a = 3;
-                    print(a > 5);          /* prints false */
-                    print("abc"+"def");    /* prints abcdef */
+                    if (a == 3 && a > 5){
+                        print("this should not print");
+                        if (a < 5){
+                            print("a < 5");
+                        }
+                    }
+                    else{
+                        print("this should print");
+                    }
                     }
                     """
   interpreter = Interpreter()
