@@ -54,6 +54,8 @@ class Interpreter(InterpreterBase):
                 self.__var_def(statement)
             elif statement.elem_type == "if":
                 self.__handle_if(statement)
+            elif statement.elem_type == "for":
+                self.__handle_for(statement)
 
     def __call_func(self, call_node):
         func_name = call_node.get("name")
@@ -232,18 +234,41 @@ class Interpreter(InterpreterBase):
         elif else_statements is not None:  # false & else block exists
             self.__run_statements(else_statements)
 
+    def __handle_for(self, for_ast):
+        init_expr = for_ast.get("init")             # initialization expression
+        condition_expr = for_ast.get("condition")   # condition to evaluate
+        update_expr = for_ast.get("update")         # update expression
+        body_statements = for_ast.get("statements") # statements in the loop body
+
+        self.__assign(init_expr)                    # assign the initialization once
+
+        while True:
+            # eval the condition expression
+            condition_value = self.__eval_expr(condition_expr)
+
+            # CHECK: the condition is a boolean
+            if condition_value.type() != Type.BOOL:
+                super().error(ErrorType.TYPE_ERROR, f"For loop condition ({condition_value}) isn't a boolean")
+
+            # if condition is false: stop loop
+            if not condition_value.value():
+                break
+            self.__run_statements(body_statements)
+
+            # update expression
+            self.__assign(update_expr)
+
 def main():
   program = """func main() {
-                    var a;
-                    a = 3;
-                    if (a == 3 && a > 5){
-                        print("this should not print");
-                        if (a < 5){
-                            print("a < 5");
+                    var i;
+                    for (i = 0; i < 6; i = i + 1) {
+                        print(i);
+                        if (i == 3){
+                            print("reached if within for loop");
                         }
-                    }
-                    else{
-                        print("this should print");
+                        else{
+                            print("on an iteration thats not #3");
+                        }
                     }
                     }
                     """
