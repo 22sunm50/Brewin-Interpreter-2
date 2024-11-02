@@ -33,7 +33,9 @@ class Interpreter(InterpreterBase):
     def __set_up_function_table(self, ast):
         self.func_name_to_ast = {}
         for func_def in ast.get("functions"):
-            self.func_name_to_ast[func_def.get("name")] = func_def
+            func_name = func_def.get("name")
+            param_count = len(func_def.get("args"))
+            self.func_name_to_ast[(func_name, param_count)] = func_def # for func overloading: use (name, param_count) tuple as the key
 
     def __get_func_by_name(self, name):
         if name not in self.func_name_to_ast:
@@ -96,7 +98,7 @@ class Interpreter(InterpreterBase):
         if call_ast.get("name") == "inputi":
             return Value(Type.INT, int(inp))
         if call_ast.get("name") == "inputs":
-            return Value(Type.STRING, int(inp))
+            return Value(Type.STRING, str(inp))
 
     def __assign(self, assign_ast):
         var_name = assign_ast.get("name")
