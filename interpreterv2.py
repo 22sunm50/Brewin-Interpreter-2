@@ -21,29 +21,31 @@ class Interpreter(InterpreterBase):
     def run(self, program):
         ast = parse_program(program)
         self.__set_up_function_table(ast)
-        main_func = self.__get_func_by_name("main")
+        main_func = self.__get_func_by_name("main", 0)
         self.env = EnvironmentManager()
         self.__run_statements(main_func.get("statements"))
 
-    # creates a mapping of function names to their AST nodes, 
-        # good for: quick look-up of functions during execution.
     def __set_up_function_table(self, ast):
         self.func_name_to_ast = {}
         for func_def in ast.get("functions"):
-            self.func_name_to_ast[func_def.get("name")] = func_def
-            # func_name = func_def.get("name")
-            # param_count = len(func_def.get("args"))
-            # self.func_name_to_ast[(func_name, param_count)] = func_def # for func overloading: use (name, param_count) tuple as the key
+            # 🍅 🍅 🍅 🍅 🍅 🍅: old code, delete if not needed anymore
+            # self.func_name_to_ast[func_def.get("name")] = func_def
+            func_name = func_def.get("name")
+            arg_count = len(func_def.get("args"))
+            self.func_name_to_ast[(func_name, arg_count)] = func_def # for func overloading: use (name, param_count) tuple as the key
 
-    def __get_func_by_name(self, name):
-        if name not in self.func_name_to_ast:
-            super().error(ErrorType.NAME_ERROR, f"Function {name} not found")
-        return self.func_name_to_ast[name]
+    def __get_func_by_name(self, name, arg_count):
+        func_key = (name, arg_count)
+        if func_key not in self.func_name_to_ast:
+            super().error(ErrorType.NAME_ERROR, f"Function {name} w/ arg_count {arg_count} not found")
+        return self.func_name_to_ast[func_key]
 
     def __run_statements(self, statements):
         # all statements of a function are held in arg3 of the function AST node
         for statement in statements:
-            if self.trace_output:
+            if statement.elem_type == "return":
+                return self.__handle_return(statement)
+            if self.trace_output: 
                 print(statement)
             if statement.elem_type == InterpreterBase.FCALL_NODE:
                 self.__call_func(statement)
@@ -56,15 +58,20 @@ class Interpreter(InterpreterBase):
             elif statement.elem_type == "for":
                 self.__handle_for(statement)
 
+        return Value(Type.NIL, None) # 🍅 🍅 🍅 🍅 🍅 🍅 no return statement, so return nil
+
     def __call_func(self, call_node):
         func_name = call_node.get("name")
+        args = [self.__eval_expr(arg) for arg in call_node.get("args")]
+        arg_count = len(args)
+
         if func_name == "print":
             return self.__call_print(call_node)
         if func_name == "inputi" or func_name == "inputs":
             return self.__call_input(call_node)
 
-        # add code here later to call other functions
-        super().error(ErrorType.NAME_ERROR, f"Function {func_name} not found")
+        func_def = self.__get_func_by_name(func_name, arg_count)
+        return self.__run_func(func_def, args)
 
     def __call_print(self, call_ast):
         output = ""
@@ -211,13 +218,12 @@ class Interpreter(InterpreterBase):
         condition_expr = if_ast.get("condition")
         condition_value = self.__eval_expr(condition_expr)
         
-        # ensure the condition is a boolean
+        # CHECK: the condition is a boolean
         if condition_value.type() != Type.BOOL:
           super().error(ErrorType.TYPE_ERROR, f"Condition in if statement must evaluate to a boolean. The condition is type: {condition_value.type()}")
 
         # push new dict for IF block
         self.env.push_dict()
-
         if condition_value.value():  # true condition
             self.__run_statements(if_ast.get("statements"))
         elif if_ast.get("else_statements") is not None:  # false & else block exists
@@ -227,12 +233,12 @@ class Interpreter(InterpreterBase):
         self.env.pop_dict()
 
     def __handle_for(self, for_ast):
-        init_expr = for_ast.get("init")             # initialization expression
-        condition_expr = for_ast.get("condition")   # condition to evaluate
-        update_expr = for_ast.get("update")         # update expression
-        body_statements = for_ast.get("statements") # statements in the loop body
+        init_expr = for_ast.get("init")
+        condition_expr = for_ast.get("condition")
+        update_expr = for_ast.get("update")
+        body_statements = for_ast.get("statements")
 
-        self.__assign(init_expr)                    # assign the initialization once
+        self.__assign(init_expr) # assign the initialization once
 
         while True:
             self.env.push_dict()
@@ -243,24 +249,49 @@ class Interpreter(InterpreterBase):
             if condition_value.type() != Type.BOOL:
                 super().error(ErrorType.TYPE_ERROR, f"Loop condition ({condition_value}) isn't a boolean")
 
-            # if condition is false: stop loop
+            # if condition is false: exit loop
             if not condition_value.value():
+                self.env.pop_dict()
                 break
             self.__run_statements(body_statements)
             self.__assign(update_expr) # update
 
             self.env.pop_dict()
 
+    def __handle_return(self, return_node):
+        if return_node.get("expression") is not None:
+            return self.__eval_expr(return_node.get("expression"))
+        # 🍅 🍅 🍅 🍅 🍅: should i return it as a Value nil?
+        return None
+    
+    def __run_func(self, func_def, args):
+        self.env.push_func_stack()
+
+        # add args to new func stack
+        params = func_def.get("args")
+        for param, arg_value in zip(params, args):
+            self.env.create(param, arg_value) # pass-by-value: copy arg value
+
+        result = self.__run_statements(func_def.get("statements"))
+        self.env.pop_func_stack()
+        return result
+    
 def main():
-  program = """func main() {
+  program = """
+                    func foo(){
+                        var c;
+                        c = 25;
+                        print("I went to foo");
+                    }
+                    
+                    func main() {
                     var c;
                     c = 10;
-                    if (c == 10) {
-                        var c;     /* variable of the same name as outer variable */
-                        c = "hi";
-                        print(c);  /* prints "hi"; the inner c shadows the outer c*/
-                    }
-                    print(c); /* prints 10 */
+                    foo();
+                    print(((print("evaluated1") == nil) && (print("evaluated2") == nil)));
+                    print("this should print 10:");
+                    print(c);
+                    
                     }
                     """
   interpreter = Interpreter()

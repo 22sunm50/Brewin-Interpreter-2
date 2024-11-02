@@ -4,22 +4,37 @@
 # and a value (e.g., Int, 10).
 class EnvironmentManager:
     def __init__(self):
-        self.environment = [{}]
+        self.environment = [[{}]]
 
-    # for entering an if/for block
-    def push_dict(self):
-        self.environment.append({})
+    # enter new func
+    def push_func_stack(self):
+        self.environment.append([{}])
 
-    # exiting if/for block
-    def pop_dict(self):
-        if len(self.environment) > 1:
+    # exit a func
+    def pop_func_stack(self):
+        if len(self.environment) > 0:
             self.environment.pop()
         else:
-            raise RuntimeError("Michelle!! check whats wrong bc u cannot pop anymore dicts on the stack!")
+            raise RuntimeError("Michelle!! check whats wrong bc u cannot pop anymore func stacks on the EnvironmentManager!")
+
+    # enter an if/for block
+    def push_dict(self):
+        if not self.environment:
+            raise RuntimeError("🙅‍♀️ Michelle!! check whats wrong bc no func stack available to push a new dictionary!")
+        self.environment[-1].append({})
+
+    # exit if/for block
+    def pop_dict(self):
+        if len(self.environment) > 0 and len(self.environment[-1]) > 1:
+            self.environment[-1].pop()
+        else:
+            raise RuntimeError("🙅‍♀️ Michelle!! check whats wrong bc u cannot pop anymore dicts on the stack!")
 
     # gets the data from var name (going from inner -> outer dict)
     def get(self, symbol):
-        for env in reversed(self.environment):
+        if not self.environment:
+            return None  # no scope available
+        for env in reversed(self.environment[-1]):
             if symbol in env:
                 return env[symbol]
         return None
@@ -27,7 +42,9 @@ class EnvironmentManager:
     # set the data from var name (in innermost dict)
     # if name not found, move to outter dict
     def set(self, symbol, value):
-        for env in reversed(self.environment):
+        if not self.environment:
+            return False  # 🍅 no scope available
+        for env in reversed(self.environment[-1]):
             if symbol in env:
                 env[symbol] = value
                 return True
@@ -36,8 +53,11 @@ class EnvironmentManager:
 
     # create new var in curr innermost dict
     def create(self, symbol, start_val):
-        current_env = self.environment[-1]
-        if symbol not in current_env: 
-          current_env[symbol] = start_val
-          return True
+        if not self.environment:
+            raise RuntimeError("🙅‍♀️ Michelle!! check whats wrong bc no func stack available to create new var!")
+
+        current_func_stack = self.environment[-1][-1]
+        if symbol not in current_func_stack: 
+            current_func_stack[symbol] = start_val
+            return True
         return False # var already exists in curr dict
