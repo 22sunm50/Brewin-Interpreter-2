@@ -18,9 +18,6 @@ class Interpreter(InterpreterBase):
         self.trace_output = trace_output
         self.__setup_ops()
 
-    # run a program that's provided in a string
-    # usese the provided Parser found in brewparse.py to parse the program
-    # into an abstract syntax tree (ast)
     def run(self, program):
         ast = parse_program(program)
         self.__set_up_function_table(ast)
@@ -33,9 +30,10 @@ class Interpreter(InterpreterBase):
     def __set_up_function_table(self, ast):
         self.func_name_to_ast = {}
         for func_def in ast.get("functions"):
-            func_name = func_def.get("name")
-            param_count = len(func_def.get("args"))
-            self.func_name_to_ast[(func_name, param_count)] = func_def # for func overloading: use (name, param_count) tuple as the key
+            self.func_name_to_ast[func_def.get("name")] = func_def
+            # func_name = func_def.get("name")
+            # param_count = len(func_def.get("args"))
+            # self.func_name_to_ast[(func_name, param_count)] = func_def # for func overloading: use (name, param_count) tuple as the key
 
     def __get_func_by_name(self, name):
         if name not in self.func_name_to_ast:
@@ -44,7 +42,6 @@ class Interpreter(InterpreterBase):
 
     def __run_statements(self, statements):
         # all statements of a function are held in arg3 of the function AST node
-        print(f"🗣️ Entered run_statements! statements list = {statements}")
         for statement in statements:
             if self.trace_output:
                 print(statement)
@@ -63,25 +60,21 @@ class Interpreter(InterpreterBase):
         func_name = call_node.get("name")
         if func_name == "print":
             return self.__call_print(call_node)
-        if func_name == "inputi":
+        if func_name == "inputi" or func_name == "inputs":
             return self.__call_input(call_node)
 
         # add code here later to call other functions
         super().error(ErrorType.NAME_ERROR, f"Function {func_name} not found")
 
     def __call_print(self, call_ast):
-        print(f"🖨️ Entered the print function")
         output = ""
         for arg in call_ast.get("args"):
-            print(f"🖨️ print arg: {arg}")
             result = self.__eval_expr(arg)  # result gives a Value object
-            print(f"🖨️ result after __eval_expr: {result}")
             # BOOLS:
             if result.type() == Type.BOOL:
                 output += "true" if result.value() else "false"
             else: 
                 output = output + get_printable(result)
-            print(f"🖨️ the output: {output}")
         super().output(output)
         return Value(Type.NIL, None)  # print returns 'nil' (needed within an expression)
 
@@ -116,7 +109,6 @@ class Interpreter(InterpreterBase):
             )
 
     def __eval_expr(self, expr_ast):
-        print(f"💾 Entered __eval_expr!")
         if expr_ast.elem_type == InterpreterBase.INT_NODE:
             return Value(Type.INT, expr_ast.get("val"))
         if expr_ast.elem_type == InterpreterBase.STRING_NODE:
@@ -128,7 +120,6 @@ class Interpreter(InterpreterBase):
         if expr_ast.elem_type == InterpreterBase.VAR_NODE:
             var_name = expr_ast.get("name")
             val = self.env.get(var_name)
-            print(f"💾 got val from var: {val}")
             if val is None:
                 super().error(ErrorType.NAME_ERROR, f"Variable {var_name} not found")
             return val
@@ -148,15 +139,12 @@ class Interpreter(InterpreterBase):
                 return Value(Type.BOOL, not operand.value())
 
     def __eval_op(self, arith_ast):
-        print(f"🤖 Entered __eval_op")
-        print(f"🤖 the ops are: {arith_ast.get('op1')} and {arith_ast.get('op2')}")
-        # 🍅🍅🍅 this handles strict evaluation already i think
+        # 🍅🍅🍅 this handles strict evaluation already i think?
         left_value_obj = self.__eval_expr(arith_ast.get("op1")) # returns type Value
         left_type = left_value_obj.type()
         right_value_obj = self.__eval_expr(arith_ast.get("op2")) # returns type Value
         right_type = right_value_obj.type()
         operator = arith_ast.elem_type
-        print(f"🤖 In __eval_op: left type = {left_type} | right type = {right_type}")
 
         # special: "==" and "!="
         if operator == "==" or operator == "!=":
@@ -225,16 +213,18 @@ class Interpreter(InterpreterBase):
         
         # ensure the condition is a boolean
         if condition_value.type() != Type.BOOL:
-            super().error(ErrorType.TYPE_ERROR, "Condition in if statement must evaluate to a boolean")
+          super().error(ErrorType.TYPE_ERROR, f"Condition in if statement must evaluate to a boolean. The condition is type: {condition_value.type()}")
 
-        if_statements = if_ast.get("statements")
-        else_statements = if_ast.get("else_statements")
+        # push new dict for IF block
+        self.env.push_dict()
 
-        # execute the appropriate block based on the condition
-        if condition_value.value():  # true if
-            self.__run_statements(if_statements)
-        elif else_statements is not None:  # false & else block exists
-            self.__run_statements(else_statements)
+        if condition_value.value():  # true condition
+            self.__run_statements(if_ast.get("statements"))
+        elif if_ast.get("else_statements") is not None:  # false & else block exists
+            self.__run_statements(if_ast.get("else_statements"))
+
+        # after running statements, exit IF block
+        self.env.pop_dict()
 
     def __handle_for(self, for_ast):
         init_expr = for_ast.get("init")             # initialization expression
@@ -245,33 +235,32 @@ class Interpreter(InterpreterBase):
         self.__assign(init_expr)                    # assign the initialization once
 
         while True:
+            self.env.push_dict()
             # eval the condition expression
             condition_value = self.__eval_expr(condition_expr)
 
             # CHECK: the condition is a boolean
             if condition_value.type() != Type.BOOL:
-                super().error(ErrorType.TYPE_ERROR, f"For loop condition ({condition_value}) isn't a boolean")
+                super().error(ErrorType.TYPE_ERROR, f"Loop condition ({condition_value}) isn't a boolean")
 
             # if condition is false: stop loop
             if not condition_value.value():
                 break
             self.__run_statements(body_statements)
+            self.__assign(update_expr) # update
 
-            # update expression
-            self.__assign(update_expr)
+            self.env.pop_dict()
 
 def main():
   program = """func main() {
-                    var i;
-                    for (i = 0; i < 6; i = i + 1) {
-                        print(i);
-                        if (i == 3){
-                            print("reached if within for loop");
-                        }
-                        else{
-                            print("on an iteration thats not #3");
-                        }
+                    var c;
+                    c = 10;
+                    if (c == 10) {
+                        var c;     /* variable of the same name as outer variable */
+                        c = "hi";
+                        print(c);  /* prints "hi"; the inner c shadows the outer c*/
                     }
+                    print(c); /* prints 10 */
                     }
                     """
   interpreter = Interpreter()
