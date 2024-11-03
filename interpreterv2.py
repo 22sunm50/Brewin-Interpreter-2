@@ -182,14 +182,14 @@ class Interpreter(InterpreterBase):
         if left_type != right_type:
             super().error(
                 ErrorType.TYPE_ERROR,
-                f"Incompatible types [{left_type} and {right_type}] for {arith_ast.elem_type} operation",
+                f"Incompatible types [{left_type} and {right_type}] for {operator} operation",
             )
-        if arith_ast.elem_type not in self.op_to_lambda[left_type]:
+        if operator not in self.op_to_lambda[left_type]:
             super().error(
                 ErrorType.TYPE_ERROR,
-                f"Incompatible operator {arith_ast.get_type} for type {left_type}",
+                f"Incompatible operator {operator} for type {left_type}",
             )
-        f = self.op_to_lambda[left_type][arith_ast.elem_type]
+        f = self.op_to_lambda[left_type][operator]
         return f(left_value_obj, right_value_obj)
 
     def __setup_ops(self):
@@ -316,7 +316,7 @@ class Interpreter(InterpreterBase):
 def main():
   program = """
                 func main() {
-                    print("a" >= "a");
+                    print(print("hi") != nil);
                 }
                 """
   interpreter = Interpreter()
