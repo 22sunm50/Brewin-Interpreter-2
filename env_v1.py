@@ -56,8 +56,8 @@ class EnvironmentManager:
         if not self.environment:
             raise RuntimeError("🙅‍♀️ Michelle!! check whats wrong bc no func stack available to create new var!")
 
-        current_func_stack = self.environment[-1][-1]
-        if symbol not in current_func_stack: 
-            current_func_stack[symbol] = start_val
+        current_dict_stack = self.environment[-1][-1]
+        if symbol not in current_dict_stack: 
+            current_dict_stack[symbol] = start_val
             return True
         return False # var already exists in curr dict

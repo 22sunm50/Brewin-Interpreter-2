@@ -43,4 +43,8 @@ def get_printable(val):
         if val.value() is True:
             return "true"
         return "false"
+    # 🍅 🍅 🍅 🍅 🍅 🍅 🍅 🍅 🍅 🍅 🍅 🍅 🍅 🍅 🍅 🍅
+    # THIS MADE ME FAIL NIL1 THO
+    if val.type() == Type.NIL:
+        return "nil" # Type.NIL returns a string
     return None

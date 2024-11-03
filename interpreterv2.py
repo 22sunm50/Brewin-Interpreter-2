@@ -42,23 +42,34 @@ class Interpreter(InterpreterBase):
 
     def __run_statements(self, statements):
         # all statements of a function are held in arg3 of the function AST node
+        result_tuple = (Value(Type.NIL, None), False)
         for statement in statements:
+            # 🍅 🍅 🍅: to deal with returning out of the IF block and straight back out the func?
+            if result_tuple[1] == True:
+                return result_tuple
             if statement.elem_type == "return":
-                return self.__handle_return(statement)
-            if self.trace_output: 
-                print(statement)
+                result_tuple = self.__handle_return(statement)
+                return result_tuple
+            # if self.trace_output: 
+            #     print(statement)
             if statement.elem_type == InterpreterBase.FCALL_NODE:
-                self.__call_func(statement)
+                # self.__call_func(statement) # 🍅 🍅 OLD CODE
+                result_tuple = self.__call_func(statement)
+                if result_tuple[1]: # ret_early = True
+                    return result_tuple 
             elif statement.elem_type == "=":
                 self.__assign(statement)
             elif statement.elem_type == InterpreterBase.VAR_DEF_NODE:
                 self.__var_def(statement)
             elif statement.elem_type == "if":
-                self.__handle_if(statement)
+                result_tuple = self.__handle_if(statement)
+                if result_tuple[1]: # ret_early = True
+                    return result_tuple
             elif statement.elem_type == "for":
-                self.__handle_for(statement)
-
-        return Value(Type.NIL, None) # 🍅 🍅 🍅 🍅 🍅 🍅 no return statement, so return nil
+                result_tuple = self.__handle_for(statement)
+                if result_tuple[1]: # ret_early = True
+                    return result_tuple 
+        return Value(Type.NIL, None), False # no return statement, so return nil
 
     def __call_func(self, call_node):
         func_name = call_node.get("name")
@@ -66,12 +77,15 @@ class Interpreter(InterpreterBase):
         arg_count = len(args)
 
         if func_name == "print":
-            return self.__call_print(call_node)
+            return self.__call_print(call_node), False
         if func_name == "inputi" or func_name == "inputs":
-            return self.__call_input(call_node)
+            return self.__call_input(call_node), False
 
         func_def = self.__get_func_by_name(func_name, arg_count)
-        return self.__run_func(func_def, args)
+        return self.__run_func(func_def, args) # __run_func returns (result, ret_early)
+        # 🍅 🍅 🍅 COMMENTED OUT
+        # result, ret_early = self.__run_func(func_def, args)
+        # return result, ret_early
 
     def __call_print(self, call_ast):
         output = ""
@@ -131,7 +145,12 @@ class Interpreter(InterpreterBase):
                 super().error(ErrorType.NAME_ERROR, f"Variable {var_name} not found")
             return val
         if expr_ast.elem_type == InterpreterBase.FCALL_NODE:
-            return self.__call_func(expr_ast)
+            # 🍅 🍅 🍅 🍅 🍅 🍅 🍅 🍅 🍅 🍅 OLD CODE BUT IDK NEW CODE RIGHT
+            # return self.__call_func(expr_ast)
+            # directly return result from function call, ignoring ret_early
+            result, _ = self.__call_func(expr_ast)
+            return result
+            
         if expr_ast.elem_type in Interpreter.BIN_OPS or expr_ast.elem_type in {"&&", "||"}:
             return self.__eval_op(expr_ast)
         if expr_ast.elem_type == 'neg' or expr_ast.elem_type == '!':
@@ -225,12 +244,21 @@ class Interpreter(InterpreterBase):
         # push new dict for IF block
         self.env.push_dict()
         if condition_value.value():  # true condition
-            self.__run_statements(if_ast.get("statements"))
+            # self.__run_statements(if_ast.get("statements"))
+            result, ret_early = self.__run_statements(if_ast.get("statements"))
+            if ret_early:
+                self.env.pop_dict()  # pop out!
+                return result, True
         elif if_ast.get("else_statements") is not None:  # false & else block exists
-            self.__run_statements(if_ast.get("else_statements"))
+            # self.__run_statements(if_ast.get("else_statements"))
+            result, ret_early = self.__run_statements(if_ast.get("else_statements"))
+            if ret_early:
+                self.env.pop_dict()  # ensure we clean up before returning
+                return result, True
 
         # after running statements, exit IF block
         self.env.pop_dict()
+        return Value(Type.NIL, None), False  # no early return happened
 
     def __handle_for(self, for_ast):
         init_expr = for_ast.get("init")
@@ -253,16 +281,23 @@ class Interpreter(InterpreterBase):
             if not condition_value.value():
                 self.env.pop_dict()
                 break
-            self.__run_statements(body_statements)
-            self.__assign(update_expr) # update
 
+            # run statements & check for ret_early
+            result_tuple = self.__run_statements(body_statements)
+            if result_tuple[1]:
+                self.env.pop_dict()
+                return result_tuple
+            
+            self.__assign(update_expr) # update
             self.env.pop_dict()
+        return Value(Type.NIL, None), False
 
     def __handle_return(self, return_node):
         if return_node.get("expression") is not None:
-            return self.__eval_expr(return_node.get("expression"))
+            # 🍅: got rid of .value()
+            return self.__eval_expr(return_node.get("expression")), True
         # 🍅 🍅 🍅 🍅 🍅: should i return it as a Value nil?
-        return None
+        return Value(Type.NIL, None), True # return nil, and 🍅 🍅 🍅 early return
     
     def __run_func(self, func_def, args):
         self.env.push_func_stack()
@@ -270,30 +305,20 @@ class Interpreter(InterpreterBase):
         # add args to new func stack
         params = func_def.get("args")
         for param, arg_value in zip(params, args):
-            self.env.create(param, arg_value) # pass-by-value: copy arg value
+            param = param.get('name')
+            arg_value = create_value(arg_value.value())
+            self.env.create(param, arg_value) # pass-by-value: copy arg value (puts args in curr env)
 
-        result = self.__run_statements(func_def.get("statements"))
+        result, ret_early = self.__run_statements(func_def.get("statements"))
         self.env.pop_func_stack()
-        return result
+        return result, ret_early
     
 def main():
   program = """
-                    func foo(){
-                        var c;
-                        c = 25;
-                        print("I went to foo");
-                    }
-                    
-                    func main() {
-                    var c;
-                    c = 10;
-                    foo();
-                    print(((print("evaluated1") == nil) && (print("evaluated2") == nil)));
-                    print("this should print 10:");
-                    print(c);
-                    
-                    }
-                    """
+                func main() {
+                    print("a" >= "a");
+                }
+                """
   interpreter = Interpreter()
   interpreter.run(program)
 
