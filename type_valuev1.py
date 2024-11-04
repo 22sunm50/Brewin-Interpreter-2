@@ -30,12 +30,18 @@ def create_value(val):
         return Value(Type.STRING, val)
     elif isinstance(val, int):
         return Value(Type.INT, val)
+    elif val == None:
+        return Value(Type.NIL, None)
     else:
         raise ValueError("Unknown value type")
 
 
 def get_printable(val):
     if val.type() == Type.INT:
+        if val.value() is True:
+            return "true"
+        elif val.value() is False:
+            return "false"
         return str(val.value())
     if val.type() == Type.STRING:
         return val.value()

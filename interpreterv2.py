@@ -28,8 +28,6 @@ class Interpreter(InterpreterBase):
     def __set_up_function_table(self, ast):
         self.func_name_to_ast = {}
         for func_def in ast.get("functions"):
-            # 🍅 🍅 🍅 🍅 🍅 🍅: old code, delete if not needed anymore
-            # self.func_name_to_ast[func_def.get("name")] = func_def
             func_name = func_def.get("name")
             arg_count = len(func_def.get("args"))
             self.func_name_to_ast[(func_name, arg_count)] = func_def # for func overloading: use (name, param_count) tuple as the key
@@ -44,16 +42,13 @@ class Interpreter(InterpreterBase):
         # all statements of a function are held in arg3 of the function AST node
         result_tuple = (Value(Type.NIL, None), False)
         for statement in statements:
-            # 🍅 🍅 🍅: to deal with returning out of the IF block and straight back out the func?
+            # 🍅: to deal with returning out of the IF block and straight back out the func?
             if result_tuple[1] == True:
                 return result_tuple
             if statement.elem_type == "return":
                 result_tuple = self.__handle_return(statement)
                 return result_tuple
-            # if self.trace_output: 
-            #     print(statement)
             if statement.elem_type == InterpreterBase.FCALL_NODE:
-                # self.__call_func(statement) # 🍅 🍅 OLD CODE
                 result_tuple = self.__call_func(statement)
                 if result_tuple[1]: # ret_early = True
                     return result_tuple 
@@ -73,31 +68,33 @@ class Interpreter(InterpreterBase):
 
     def __call_func(self, call_node):
         func_name = call_node.get("name")
-        args = [self.__eval_expr(arg) for arg in call_node.get("args")]
-        arg_count = len(args)
-
+        
         if func_name == "print":
             return self.__call_print(call_node), False
         if func_name == "inputi" or func_name == "inputs":
             return self.__call_input(call_node), False
 
+        args = [self.__eval_expr(arg) for arg in call_node.get("args")]
+        arg_count = len(args)
         func_def = self.__get_func_by_name(func_name, arg_count)
         return self.__run_func(func_def, args) # __run_func returns (result, ret_early)
-        # 🍅 🍅 🍅 COMMENTED OUT
-        # result, ret_early = self.__run_func(func_def, args)
-        # return result, ret_early
 
     def __call_print(self, call_ast):
         output = ""
+        count = 0
         for arg in call_ast.get("args"):
             result = self.__eval_expr(arg)  # result gives a Value object
             # BOOLS:
             if result.type() == Type.BOOL:
                 output += "true" if result.value() else "false"
-            else: 
-                output = output + get_printable(result)
+            # elif result.value() == True or result.value() == False: # turn primitive Python boolean into lowercase
+            #     output += "true" if result.value() else "false"
+            elif result.type() != Type.NIL:  # skip nil values in print
+                output += get_printable(result)
+            count += 1
         super().output(output)
         return Value(Type.NIL, None)  # print returns 'nil' (needed within an expression)
+
 
     def __call_input(self, call_ast):
         args = call_ast.get("args")
@@ -144,10 +141,12 @@ class Interpreter(InterpreterBase):
             if val is None:
                 super().error(ErrorType.NAME_ERROR, f"Variable {var_name} not found")
             return val
-        if expr_ast.elem_type == InterpreterBase.FCALL_NODE:
-            # 🍅 🍅 🍅 🍅 🍅 🍅 🍅 🍅 🍅 🍅 OLD CODE BUT IDK NEW CODE RIGHT
-            # return self.__call_func(expr_ast)
-            # directly return result from function call, ignoring ret_early
+        if expr_ast.elem_type == InterpreterBase.FCALL_NODE:        
+            # Handle the print function as a special case
+            func_name = expr_ast.get("name")
+            if func_name == "print":
+                return self.__call_print(expr_ast)  # Call print only once
+            # For other function calls
             result, _ = self.__call_func(expr_ast)
             return result
             
@@ -165,7 +164,7 @@ class Interpreter(InterpreterBase):
                 return Value(Type.BOOL, not operand.value())
 
     def __eval_op(self, arith_ast):
-        # 🍅🍅🍅 this handles strict evaluation already i think?
+        # handles strict evaluation already?
         left_value_obj = self.__eval_expr(arith_ast.get("op1")) # returns type Value
         left_type = left_value_obj.type()
         right_value_obj = self.__eval_expr(arith_ast.get("op2")) # returns type Value
@@ -190,7 +189,8 @@ class Interpreter(InterpreterBase):
                 f"Incompatible operator {operator} for type {left_type}",
             )
         f = self.op_to_lambda[left_type][operator]
-        return f(left_value_obj, right_value_obj)
+        result_val_obj = (f(left_value_obj, right_value_obj))
+        return result_val_obj
 
     def __setup_ops(self):
         # dict of ops to corresponding lambda
@@ -294,10 +294,8 @@ class Interpreter(InterpreterBase):
 
     def __handle_return(self, return_node):
         if return_node.get("expression") is not None:
-            # 🍅: got rid of .value()
             return self.__eval_expr(return_node.get("expression")), True
-        # 🍅 🍅 🍅 🍅 🍅: should i return it as a Value nil?
-        return Value(Type.NIL, None), True # return nil, and 🍅 🍅 🍅 early return
+        return Value(Type.NIL, None), True # return nil, and early return
     
     def __run_func(self, func_def, args):
         self.env.push_func_stack()
@@ -315,9 +313,13 @@ class Interpreter(InterpreterBase):
     
 def main():
   program = """
-                func main() {
-                    print(print("hi") != nil);
-                }
+func bar(a) {
+  print(a);
+}
+
+func main() {
+  bar(false || true);
+}
                 """
   interpreter = Interpreter()
   interpreter.run(program)
