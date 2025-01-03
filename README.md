@@ -80,3 +80,6 @@ To run a Brewin program within `interpreterv1.py` or `interpreterv2.py`:
 ### Brewin Interpreter 2
 - `nil` values may behave unpredictably in specific cases not outlined in the spec.
 - Division by zero has undefined behavior.
+
+## Test Cases
+For running test cases, please refer to this repository: https://github.com/22sunm50/Brewin-Interpreter-Tests
